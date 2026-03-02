@@ -82,7 +82,7 @@ export default function EditQuizPage() {
       const apiKey = process.env.NEXT_PUBLIC_GOOGLE_AI_KEY
       
       if (!apiKey) {
-        throw new Error('Falta la API Key de Google. Configura NEXT_PUBLIC_GOOGLE_AI_KEY')
+        throw new Error('Falta la API Key de Google. Configura NEXT_PUBLIC_GOOGLE_AI_KEY en Vercel')
       }
 
       const prompt = `Genera exactamente 5 preguntas de quiz sobre: ${aiPrompt}.
@@ -100,35 +100,53 @@ Devuelve SOLO JSON válido sin texto adicional, sin markdown:
   ]
 }`
 
-      // Usar fetch directo en lugar del SDK
-      // Modelo: gemini-2.0-flash es el más reciente y estable
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: prompt
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2048,
-          }
-        })
-      })
+      // Función con retry logic (reintentos exponenciales)
+      const fetchWithRetry = async (retries = 3) => {
+        for (let i = 0; i < retries; i++) {
+          try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
+            
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contents: [{
+                  parts: [{
+                    text: prompt
+                  }]
+                }],
+                generationConfig: {
+                  temperature: 0.7,
+                  maxOutputTokens: 2048,
+                }
+              })
+            })
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error?.message || 'Error en la API')
+            if (!response.ok) {
+              const error = await response.json()
+              
+              // Si es error 429 (rate limit), esperar más antes de reintentar
+              if (error.error?.code === 429 && i < retries - 1) {
+                const waitTime = Math.pow(2, i) * 2000 // 2s, 4s, 8s
+                await new Promise(r => setTimeout(r, waitTime))
+                continue
+              }
+              
+              throw new Error(error.error?.message || 'Error en la API')
+            }
+
+            return await response.json()
+          } catch (err: any) {
+            if (i === retries - 1) throw err
+            await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000))
+          }
+        }
       }
 
-      const data = await response.json()
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+      const data = await fetchWithRetry()
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
       
       if (!text) {
         throw new Error('La IA no devolvió contenido válido')
@@ -150,13 +168,13 @@ Devuelve SOLO JSON válido sin texto adicional, sin markdown:
       console.error('AI Error:', error)
       let msg = 'Error generando preguntas. '
       if (error.message?.includes('API Key')) {
-        msg += 'Verifica tu API Key en .env.local y Vercel'
+        msg += 'Verifica tu API Key en Vercel (Settings → Environment Variables)'
       } else if (error.message?.includes('403')) {
-        msg += 'API Key no válida. Verifica en Google AI Studio'
+        msg += 'API Key inválida. Creá una nueva en Google AI Studio'
+      } else if (error.message?.includes('429') || error.message?.includes('quota')) {
+        msg += 'Límite alcanzado. Esperá 1-2 minutos o usá otra API Key'
       } else if (error.message?.includes('404')) {
-        msg += 'Modelo no encontrado.'
-      } else if (error.message?.includes('quota') || error.message?.includes('QUOTA')) {
-        msg += 'Límite de API alcanzado. Espera o usa otra key.'
+        msg += 'Modelo no disponible. Reintentando...'
       } else {
         msg += error.message
       }

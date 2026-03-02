@@ -71,18 +71,13 @@ export default function SessionLobbyPage() {
   }, [sessionData?.status, sessionId, router])
 
   const handleStart = async () => {
-    const { error } = await supabase
-      .from('sessions')
-      .update({ status: 'active', started_at: new Date().toISOString() })
-      .eq('id', sessionId)
-
-    if (error) {
-      toast.error('Error al iniciar')
+    // Redirigir a selección de modo de juego
+    const quizId = quiz?.id
+    if (!quizId) {
+      toast.error('Quiz no encontrado')
       return
     }
-
-    toast.success('¡Juego iniciado!')
-    router.push(`/play/${sessionId}/question`)
+    router.push(`/teacher/${quizId}/select-mode`)
   }
 
   const joinUrl = `${window.location.origin}/join?pin=${sessionPin}`

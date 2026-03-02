@@ -3,10 +3,12 @@
 import { Gamepad2, Users, Trophy, Zap, QrCode, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
+import Onboarding from '@/components/Onboarding'
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
+      <Onboarding />
       {/* Hero Section */}
       <div className="relative overflow-hidden">
         {/* Animated background elements */}

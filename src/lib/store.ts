@@ -24,7 +24,7 @@ export type ParticipantData = {
   is_eliminated: boolean
 }
 
-export type GameMode = 'classic' | 'teams' | 'elimination' | 'speed'
+export type GameMode = 'classic' | 'teams' | 'elimination' | 'blitz' | 'speed'
 
 interface QuizState {
   // Session
