@@ -50,7 +50,9 @@ interface QuizState {
   // User state
   participantId: string | null
   nickname: string | null
+  avatarColor: string | null
   setParticipantInfo: (id: string, nickname: string) => void
+  setAvatarColor: (color: string) => void
   isEliminated: boolean
   setIsEliminated: (eliminated: boolean) => void
   team: string | null
@@ -102,7 +104,9 @@ export const useQuizStore = create<QuizState>()(
 
       participantId: null,
       nickname: null,
+      avatarColor: null,
       setParticipantInfo: (id, nickname) => set({ participantId: id, nickname }),
+      setAvatarColor: (color) => set({ avatarColor: color }),
       isEliminated: false,
       setIsEliminated: (eliminated) => set({ isEliminated: eliminated }),
       team: null,
