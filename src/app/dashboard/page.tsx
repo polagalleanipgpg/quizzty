@@ -17,6 +17,7 @@ import {
   Trash2,
   Edit,
   Copy,
+  BarChart3,
 } from 'lucide-react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
@@ -294,6 +295,13 @@ export default function DashboardPage() {
                     >
                       <Play className="w-4 h-4" />
                       Jugar
+                    </Link>
+                    <Link
+                      href={`/teacher/${quiz.id}/analytics`}
+                      className="p-2 hover:bg-purple-500/20 rounded-xl transition-colors"
+                      title="Ver estadísticas"
+                    >
+                      <BarChart3 className="w-4 h-4 text-purple-400" />
                     </Link>
                     <Link
                       href={`/teacher/${quiz.id}/edit`}
