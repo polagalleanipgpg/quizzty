@@ -7,247 +7,111 @@ import { useQuizStore } from '@/lib/store'
 import { Users, Copy, Check, QrCode, Play } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import QRDisplay from '@/components/QRDisplay'
-import Leaderboard from '@/components/Leaderboard'
 
 export default function SessionLobbyPage() {
   const params = useParams()
   const router = useRouter()
-  const quizId = params.id as string // Ahora es quiz_id, no session_id
+  const sessionId = params.id as string // ESTE ES EL SESSION_ID REAL
 
-  const {
-    sessionPin,
-    setSession,
-    participants,
-    setParticipants,
-  } = useQuizStore()
+  const { sessionPin, setSession, participants, setParticipants } = useQuizStore()
 
   const [session, setSessionData] = useState<any>(null)
   const [quiz, setQuiz] = useState<any>(null)
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
-    const fetchQuizAndCreateSession = async () => {
-      console.log('🔍 Fetching quiz:', quizId)
-      
-      if (!quizId) {
-        console.error('❌ No quizId provided')
-        toast.error('Quiz ID no válido')
+    console.log('🔍 Loading lobby for session:', sessionId)
+    
+    const fetchSession = async () => {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select(`
+          id, pin, status, game_mode, quiz_id,
+          quizzes (id, title, description)
+        `)
+        .eq('id', sessionId)
+        .single()
+
+      if (error || !data) {
+        console.error('❌ Error:', error)
+        toast.error('Sesión no encontrada')
         setLoading(false)
         return
       }
 
-      try {
-        // 1. Obtener info del quiz
-        const { data: quizData, error: quizError } = await supabase
-          .from('quizzes')
-          .select('id, title, description, subject')
-          .eq('id', quizId)
-          .single()
-
-        if (quizError) {
-          console.error('❌ Error fetching quiz:', quizError)
-          toast.error('Quiz no encontrado: ' + quizError.message)
-          setLoading(false)
-          return
-        }
-
-        if (!quizData) {
-          console.error('❌ Quiz not found')
-          toast.error('Quiz no existe')
-          setLoading(false)
-          return
-        }
-
-        console.log('✅ Quiz found:', quizData)
-        setQuiz(quizData)
-
-        // 2. Buscar sesión existente
-        console.log('🔍 Searching for existing session...')
-        const { data: existingSession, error: existingError } = await supabase
-          .from('sessions')
-          .select('id, pin, status, game_mode')
-          .eq('quiz_id', quizId)
-          .eq('status', 'waiting')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        if (existingError) {
-          console.error('❌ Error searching session:', existingError)
-        }
-
-        if (existingSession) {
-          console.log('✅ Existing session found:', existingSession)
-          setSessionData(existingSession)
-          setSession(existingSession.id, existingSession.pin, existingSession.status, existingSession.game_mode)
-          setLoading(false)
-        } else {
-          // 3. Crear nueva sesión
-          console.log('📝 Creating new session...')
-          setCreating(true)
-
-          const { data: newSession, error: sessionError } = await supabase
-            .from('sessions')
-            .insert({
-              quiz_id: quizId,
-              status: 'waiting',
-              game_mode: 'classic',
-              current_question_index: 0,
-            })
-            .select('id, pin, status, game_mode')
-            .single()
-
-          if (sessionError) {
-            console.error('❌ Error creating session:', sessionError)
-            toast.error('Error creando sesión: ' + sessionError.message)
-            setCreating(false)
-            setLoading(false)
-            return
-          }
-
-          if (!newSession) {
-            console.error('❌ Session created but no data returned')
-            toast.error('Error: No se pudo crear la sesión')
-            setCreating(false)
-            setLoading(false)
-            return
-          }
-
-          console.log('✅ Session created:', newSession)
-          console.log('📍 Session PIN:', newSession.pin)
-          setSessionData(newSession)
-          setSession(newSession.id, newSession.pin, newSession.status, newSession.game_mode)
-          setCreating(false)
-          setLoading(false)
-
-          toast.success('Sesión creada: PIN ' + newSession.pin)
-        }
-      } catch (err: any) {
-        console.error('💥 Unexpected error:', err)
-        toast.error('Error inesperado: ' + err.message)
-        setLoading(false)
-        setCreating(false)
-      }
+      console.log('✅ Session loaded:', data)
+      setSessionData(data)
+      setQuiz(data.quizzes)
+      setSession(data.id, data.pin, data.status, data.game_mode)
+      setLoading(false)
     }
 
-    fetchQuizAndCreateSession()
-  }, [quizId])
+    fetchSession()
+  }, [sessionId])
 
   useEffect(() => {
-    if (!session?.id) return
+    if (!sessionId) return
 
-    const participantsChannel = supabase
-      .channel(`participants:${session.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'participants',
-          filter: `session_id=eq.${session.id}`,
-        },
-        async () => {
-          const { data } = await supabase
-            .from('participants')
-            .select(`
-              id,
-              nickname,
-              avatar_color,
-              team,
-              is_eliminated,
-              scores:scores(total_points)
-            `)
-            .eq('session_id', session.id)
+    const channel = supabase
+      .channel(`participants:${sessionId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'participants',
+        filter: `session_id=eq.${sessionId}`,
+      }, async () => {
+        const { data } = await supabase
+          .from('participants')
+          .select(`id, nickname, avatar_color, team, is_eliminated, scores:scores(total_points)`)
+          .eq('session_id', sessionId)
 
-          if (data) {
-            const withScores = data.map((p: any) => ({
-              ...p,
-              score: p.scores?.[0]?.total_points || 0,
-            }))
-            setParticipants(withScores.sort((a: any, b: any) => b.score - a.score))
-          }
+        if (data) {
+          const withScores = data.map((p: any) => ({ ...p, score: p.scores?.[0]?.total_points || 0 }))
+          setParticipants(withScores.sort((a: any, b: any) => b.score - a.score))
         }
-      )
+      })
       .subscribe()
 
-    return () => {
-      supabase.removeChannel(participantsChannel)
-    }
-  }, [session?.id, setParticipants])
-
-  useEffect(() => {
-    if (session?.status === 'active') {
-      router.push(`/play/${session.id}/question`)
-    }
-  }, [session?.status, session.id, router])
+    return () => { supabase.removeChannel(channel) }
+  }, [sessionId, setParticipants])
 
   const handleStart = async () => {
     const { error } = await supabase
       .from('sessions')
-      .update({ 
-        status: 'active', 
-        started_at: new Date().toISOString(),
-        current_question_index: 0,
-      })
-      .eq('id', session.id)
+      .update({ status: 'active', started_at: new Date().toISOString() })
+      .eq('id', sessionId)
 
     if (error) {
-      toast.error('Error al iniciar: ' + error.message)
+      toast.error('Error: ' + error.message)
       return
     }
 
-    toast.success('¡Juego iniciado!')
-    router.push(`/play/${session.id}/question`)
+    router.push(`/play/${sessionId}/question`)
   }
 
   const joinUrl = sessionPin ? `${window.location.origin}/join?pin=${sessionPin}` : ''
 
-  const handleCopyLink = () => {
-    if (!joinUrl) {
-      toast.error('Enlace no disponible')
-      return
-    }
-    navigator.clipboard.writeText(joinUrl)
-    setCopied(true)
-    toast.success('¡Enlace copiado!')
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  if (loading || creating) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="text-center text-white">
-          <div className="text-4xl mb-4">{creating ? '📝' : '⏳'}</div>
-          <p>{creating ? 'Creando sesión...' : 'Cargando lobby...'}</p>
-          <p className="text-sm text-slate-400 mt-2">Quiz ID: {quizId}</p>
+        <div className="text-white text-center">
+          <div className="text-4xl mb-4">⏳</div>
+          <p>Cargando...</p>
         </div>
       </div>
     )
   }
 
-  if (!session || !sessionPin || !quiz) {
-    console.error('❌ Missing data:', { session, sessionPin, quiz })
+  if (!session || !quiz) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="text-center text-white">
+        <div className="text-white text-center">
           <div className="text-4xl mb-4">❌</div>
-          <p className="text-lg font-bold mb-2">Error al cargar el lobby</p>
-          <div className="text-sm text-slate-400 mb-4 text-left inline-block">
-            {!session && <p>• Sesión no disponible</p>}
-            {!sessionPin && <p>• PIN no disponible</p>}
-            {!quiz && <p>• Quiz no disponible</p>}
-          </div>
-          <p className="text-xs text-slate-500 mb-4">Quiz ID: {quizId}</p>
-          <Link 
-            href="/dashboard" 
-            className="text-blue-500 hover:underline mt-4 inline-block"
-          >
-            Volver al dashboard
-          </Link>
+          <p>Sesión no encontrada</p>
+          <Link href="/dashboard" className="text-blue-500 underline mt-4">Volver</Link>
         </div>
       </div>
     )
@@ -255,140 +119,82 @@ export default function SessionLobbyPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
-      {/* Header */}
       <header className="border-b border-white/10 bg-slate-900/50 backdrop-blur-lg sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <Link
-              href="/dashboard"
-              className="text-slate-400 hover:text-white transition-colors"
-            >
-              ← Volver
-            </Link>
-            <h1 className="text-xl font-black text-white">
-              Lobby del Juego
-            </h1>
-            <div className="w-20" />
-          </div>
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+          <Link href="/dashboard" className="text-slate-400 hover:text-white">← Volver</Link>
+          <h1 className="text-xl font-black text-white">Lobby del Juego</h1>
+          <div className="w-20" />
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-5xl mx-auto px-4 py-8">
         <div className="grid md:grid-cols-2 gap-8">
-          {/* Left Column - QR & Info */}
+          {/* QR Column */}
           <div className="space-y-6">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-slate-900/50 border border-white/10 rounded-3xl p-6 backdrop-blur-lg text-center"
-            >
-              <h2 className="text-lg font-black text-white mb-2">
-                {quiz?.title || 'Cargando...'}
-              </h2>
-              <p className="text-slate-400 text-sm mb-6">
-                {quiz?.description || 'Sin descripción'}
-              </p>
-
-              {/* QR Display - Always Visible */}
-              <div className="mb-6">
-                <QRDisplay value={joinUrl} />
-              </div>
-
-              {/* PIN Display */}
+            <div className="bg-slate-900/50 border border-white/10 rounded-3xl p-6 text-center">
+              <h2 className="text-lg font-black text-white mb-2">{quiz.title}</h2>
+              <p className="text-slate-400 text-sm mb-6">{quiz.description || ''}</p>
+              
+              {sessionPin && <QRDisplay value={joinUrl} />}
+              
               {sessionPin && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
-                  className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 border-2 border-blue-500/50 rounded-3xl p-6 text-center"
-                >
-                  <p className="text-sm text-blue-400 mb-2 font-bold uppercase tracking-wider">PIN del Juego</p>
-                  <div className="flex items-center justify-center gap-4">
-                    <span className="text-6xl font-black text-blue-500 tracking-widest">
-                      {sessionPin}
-                    </span>
+                <div className="mt-6 bg-blue-500/10 border-2 border-blue-500/30 rounded-3xl p-6">
+                  <p className="text-sm text-blue-400 font-bold uppercase mb-2">PIN del Juego</p>
+                  <div className="flex items-center justify-center gap-3">
+                    <span className="text-6xl font-black text-blue-500">{sessionPin}</span>
                     <button
-                      onClick={handleCopyLink}
-                      className="p-3 bg-blue-500/20 hover:bg-blue-500/30 rounded-xl transition-colors"
-                      title="Copiar enlace"
+                      onClick={() => {
+                        navigator.clipboard.writeText(joinUrl)
+                        setCopied(true)
+                        toast.success('¡Copiado!')
+                        setTimeout(() => setCopied(false), 2000)
+                      }}
+                      className="p-3 bg-blue-500/20 rounded-xl"
                     >
-                      {copied ? (
-                        <Check className="w-6 h-6 text-green-400" />
-                      ) : (
-                        <Copy className="w-6 h-6 text-blue-400" />
-                      )}
+                      {copied ? <Check className="w-6 h-6 text-green-400" /> : <Copy className="w-6 h-6 text-blue-400" />}
                     </button>
                   </div>
-                </motion.div>
+                </div>
               )}
-            </motion.div>
+            </div>
           </div>
 
-          {/* Right Column - Participants */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-slate-900/50 border border-white/10 rounded-3xl p-6 backdrop-blur-lg"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2">
-                <Users className="w-6 h-6 text-blue-500" />
-                <h2 className="text-lg font-black text-white">
-                  Participantes ({participants.length})
-                </h2>
-              </div>
+          {/* Participants Column */}
+          <div className="bg-slate-900/50 border border-white/10 rounded-3xl p-6">
+            <div className="flex items-center gap-2 mb-6">
+              <Users className="w-6 h-6 text-blue-500" />
+              <h2 className="text-lg font-black text-white">Participantes ({participants.length})</h2>
             </div>
 
             {participants.length === 0 ? (
               <div className="text-center py-12 text-slate-500">
                 <Users className="w-16 h-16 mx-auto mb-4 opacity-50" />
                 <p>Esperando jugadores...</p>
-                <p className="text-sm mt-2">
-                  Comparte el QR o PIN para unirse
-                </p>
               </div>
             ) : (
               <div className="space-y-2 max-h-96 overflow-y-auto">
-                {participants.map((participant, index) => (
-                  <motion.div
-                    key={participant.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-xl"
-                  >
-                    <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-sm flex-shrink-0"
-                      style={{ backgroundColor: participant.avatar_color }}
-                    >
-                      {participant.nickname.charAt(0).toUpperCase()}
+                {participants.map((p: any, i: number) => (
+                  <div key={p.id} className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-xl">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-sm" style={{ backgroundColor: p.avatar_color }}>
+                      {p.nickname.charAt(0).toUpperCase()}
                     </div>
-                    <span className="flex-1 font-bold text-white truncate">
-                      {participant.nickname}
-                    </span>
-                    {index === 0 && participants.length > 1 && (
-                      <span className="text-xs text-amber-500 font-bold">
-                        👑 Primero
-                      </span>
-                    )}
-                  </motion.div>
+                    <span className="flex-1 font-bold text-white">{p.nickname}</span>
+                    {i === 0 && participants.length > 1 && <span className="text-xs">👑</span>}
+                  </div>
                 ))}
               </div>
             )}
 
-            {/* Start Button */}
             {participants.length > 0 && (
               <button
                 onClick={handleStart}
-                className="w-full mt-6 py-4 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold rounded-xl transition-all hover:scale-105 flex items-center justify-center gap-2 text-lg shadow-lg shadow-green-500/30"
+                className="w-full mt-6 py-4 bg-gradient-to-r from-green-600 to-green-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:scale-105 transition-transform"
               >
                 <Play className="w-6 h-6" />
-                ¡Comenzar Juego!
+                ¡Comenzar!
               </button>
             )}
-          </motion.div>
+          </div>
         </div>
       </main>
     </div>

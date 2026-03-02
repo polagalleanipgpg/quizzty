@@ -289,7 +289,7 @@ export default function DashboardPage() {
 
                   <div className="flex items-center gap-2">
                     <Link
-                      href={`/teacher/${quiz.id}/play`}
+                      href={`/teacher/${quiz.id}/select-mode`}
                       className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2"
                     >
                       <Play className="w-4 h-4" />
