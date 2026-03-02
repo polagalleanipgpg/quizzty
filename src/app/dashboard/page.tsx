@@ -1,0 +1,250 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase-server'
+import { supabase } from '@/lib/supabase'
+import { useQuizStore } from '@/lib/store'
+import {
+  Gamepad2,
+  Plus,
+  FolderOpen,
+  History,
+  LogOut,
+  Users,
+  Play,
+  MoreVertical,
+  Trash2,
+  Edit,
+  Copy,
+} from 'lucide-react'
+import Link from 'next/link'
+import { motion } from 'framer-motion'
+import { toast } from 'sonner'
+
+interface Quiz {
+  id: string
+  title: string
+  description: string | null
+  subject: string | null
+  created_at: string
+  questions_count: number
+}
+
+export default function DashboardPage() {
+  const router = useRouter()
+  const { resetStore } = useQuizStore()
+  const [quizzes, setQuizzes] = useState<Quiz[]>([])
+  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<any>(null)
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data } = await supabase.auth.getUser()
+      if (!data.user) {
+        router.push('/api/auth')
+        return
+      }
+      setUser(data.user)
+      fetchQuizzes(data.user.id)
+    }
+    checkAuth()
+  }, [router])
+
+  const fetchQuizzes = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('quizzes')
+        .select(`
+          *,
+          questions:questions(count)
+        `)
+        .eq('teacher_id', userId)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      const withCount = (data || []).map((q: any) => ({
+        ...q,
+        questions_count: q.questions?.[0]?.count || 0,
+      }))
+      setQuizzes(withCount)
+    } catch (error) {
+      console.error('Error fetching quizzes:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    resetStore()
+    toast.success('Sesión cerrada')
+    router.push('/')
+  }
+
+  const handleDeleteQuiz = async (quizId: string) => {
+    if (!confirm('¿Estás seguro de eliminar este quiz?')) return
+
+    const { error } = await supabase.from('quizzes').delete().eq('id', quizId)
+    if (error) {
+      toast.error('Error al eliminar')
+      return
+    }
+
+    setQuizzes(quizzes.filter((q) => q.id !== quizId))
+    toast.success('Quiz eliminado')
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950">
+      {/* Header */}
+      <header className="border-b border-white/10 bg-slate-900/50 backdrop-blur-lg sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <Link href="/" className="flex items-center gap-2">
+              <Gamepad2 className="w-8 h-8 text-blue-500" />
+              <span className="text-xl font-black text-white">
+                Quizz<span className="text-blue-500">ty</span>
+              </span>
+            </Link>
+
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-slate-400 hidden sm:block">
+                {user?.email}
+              </span>
+              <button
+                onClick={handleSignOut}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <LogOut className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Welcome Section */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-black text-white mb-2">
+            ¡Hola, Profesor! 👋
+          </h1>
+          <p className="text-slate-400">
+            Crea y gestiona tus quizzes interactivos
+          </p>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <Link
+            href="/teacher/create"
+            className="p-4 bg-blue-600 hover:bg-blue-700 rounded-2xl transition-all hover:scale-105 flex flex-col items-center gap-2"
+          >
+            <Plus className="w-8 h-8 text-white" />
+            <span className="font-bold text-white text-sm">Nuevo Quiz</span>
+          </Link>
+          <div className="p-4 bg-slate-900/50 border border-white/10 rounded-2xl flex flex-col items-center gap-2">
+            <FolderOpen className="w-8 h-8 text-slate-400" />
+            <span className="font-bold text-slate-400 text-sm">Carpetas</span>
+          </div>
+          <div className="p-4 bg-slate-900/50 border border-white/10 rounded-2xl flex flex-col items-center gap-2">
+            <History className="w-8 h-8 text-slate-400" />
+            <span className="font-bold text-slate-400 text-sm">Historial</span>
+          </div>
+          <div className="p-4 bg-slate-900/50 border border-white/10 rounded-2xl flex flex-col items-center gap-2">
+            <Users className="w-8 h-8 text-slate-400" />
+            <span className="font-bold text-slate-400 text-sm">Clases</span>
+          </div>
+        </div>
+
+        {/* Quizzes List */}
+        <div className="bg-slate-900/50 border border-white/10 rounded-3xl p-6 backdrop-blur-lg">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-black text-white">Mis Quizzes</h2>
+            <Link
+              href="/teacher/create"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-all hover:scale-105 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Crear
+            </Link>
+          </div>
+
+          {loading ? (
+            <div className="text-center py-12 text-slate-500">
+              Cargando quizzes...
+            </div>
+          ) : quizzes.length === 0 ? (
+            <div className="text-center py-12">
+              <Gamepad2 className="w-16 h-16 text-slate-700 mx-auto mb-4" />
+              <p className="text-slate-400 mb-4">No tienes quizzes aún</p>
+              <Link
+                href="/teacher/create"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all hover:scale-105"
+              >
+                <Plus className="w-5 h-5" />
+                Crear mi primer quiz
+              </Link>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {quizzes.map((quiz) => (
+                <motion.div
+                  key={quiz.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-4 bg-slate-800/50 border border-white/10 rounded-2xl hover:border-blue-500/50 transition-all group"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-white mb-1">{quiz.title}</h3>
+                      <p className="text-sm text-slate-400 line-clamp-2">
+                        {quiz.description}
+                      </p>
+                    </div>
+                    <div className="relative">
+                      <button className="p-1 hover:bg-white/10 rounded-lg transition-colors">
+                        <MoreVertical className="w-4 h-4 text-slate-400" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 mb-4 text-sm text-slate-500">
+                    <span className="flex items-center gap-1">
+                      <Users className="w-4 h-4" />
+                      {quiz.questions_count} preguntas
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/teacher/${quiz.id}/play`}
+                      className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2"
+                    >
+                      <Play className="w-4 h-4" />
+                      Jugar
+                    </Link>
+                    <Link
+                      href={`/teacher/${quiz.id}/edit`}
+                      className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+                    >
+                      <Edit className="w-4 h-4 text-slate-400" />
+                    </Link>
+                    <button
+                      onClick={() => handleDeleteQuiz(quiz.id)}
+                      className="p-2 hover:bg-red-500/20 rounded-xl transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-400" />
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  )
+}
