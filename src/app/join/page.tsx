@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { QrCode, ArrowLeft, User, Sparkles } from 'lucide-react'
@@ -20,7 +20,7 @@ const AVATAR_COLORS = [
   '#84CC16',
 ]
 
-export default function JoinPage() {
+function JoinForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const urlPin = searchParams.get('pin')?.toUpperCase() || ''
@@ -259,5 +259,20 @@ export default function JoinPage() {
         </div>
       </motion.div>
     </div>
+  )
+}
+
+export default function JoinPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-center text-white">
+          <div className="text-4xl mb-4">⏳</div>
+          <p>Cargando...</p>
+        </div>
+      </div>
+    }>
+      <JoinForm />
+    </Suspense>
   )
 }
