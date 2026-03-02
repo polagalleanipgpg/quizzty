@@ -43,23 +43,23 @@ export default function QRDisplay({ value }: QRDisplayProps) {
 
   return (
     <div className="flex flex-col items-center gap-6">
-      <div className="bg-white p-6 rounded-[2.5rem] shadow-2xl border border-slate-100 inline-block">
-        <canvas ref={canvasRef} className="rounded-2xl" />
+      <div className="bg-white p-8 rounded-[3rem] shadow-2xl border-4 border-blue-500/30 inline-block">
+        <canvas ref={canvasRef} className="rounded-2xl w-80 h-80" style={{ width: '320px', height: '320px' }} />
       </div>
 
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-slate-500 font-medium">PIN:</span>
-        <span className="text-3xl font-black text-slate-900 tracking-widest">
+      <div className="flex items-center gap-3 bg-blue-500/10 px-6 py-3 rounded-2xl border-2 border-blue-500/30">
+        <span className="text-sm text-blue-400 font-bold uppercase tracking-wider">PIN del Juego:</span>
+        <span className="text-5xl font-black text-blue-500 tracking-widest">
           {value.split('/').pop()}
         </span>
       </div>
 
       <button
         onClick={handleCopy}
-        className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all active:scale-95 shadow-xl shadow-slate-200"
+        className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-95 shadow-2xl shadow-blue-500/50"
       >
-        {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-        {copied ? '¡COPIADO!' : 'COPIAR ENLACE'}
+        {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+        {copied ? '¡ENLACE COPIADO!' : 'COPIAR ENLACE DE UNIÓN'}
       </button>
     </div>
   )

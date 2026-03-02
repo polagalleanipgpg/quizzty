@@ -105,12 +105,50 @@ export default function DashboardPage() {
 
     const { error } = await supabase.from('quizzes').delete().eq('id', quizId)
     if (error) {
-      toast.error('Error al eliminar')
+      toast.error('Error al eliminar: ' + error.message)
       return
     }
 
     setQuizzes(quizzes.filter((q) => q.id !== quizId))
     toast.success('Quiz eliminado')
+  }
+
+  // Debug: Test de inserción directa
+  const handleTestInsert = async () => {
+    console.log('🧪 INICIANDO TEST DE INSERCIÓN...')
+    
+    if (!user?.id) {
+      console.error('❌ No hay user.id')
+      toast.error('Error: Usuario no autenticado')
+      return
+    }
+
+    console.log('👤 User ID:', user.id)
+
+    const testTitle = `Quiz Test ${new Date().toLocaleTimeString()}`
+    console.log('📝 Insertando quiz:', testTitle)
+
+    const { data: testQuiz, error: testError } = await supabase
+      .from('quizzes')
+      .insert({
+        title: testTitle,
+        description: 'Este es un quiz de prueba para debuggear',
+        teacher_id: user.id,
+      })
+      .select()
+      .single()
+
+    if (testError) {
+      console.error('❌ ERROR EN INSERCIÓN:', testError)
+      toast.error('Error: ' + testError.message)
+      return
+    }
+
+    console.log('✅ QUIZ CREADO EXITOSAMENTE:', testQuiz)
+    toast.success('¡Quiz de prueba creado! Recargando...')
+    
+    // Recargar quizzes
+    await fetchQuizzes(user.id)
   }
 
   return (
@@ -200,6 +238,8 @@ export default function DashboardPage() {
               <p className="text-slate-400 mb-4">No tienes quizzes aún</p>
               <div className="text-sm text-slate-500 mb-6">
                 Usuario: {user?.email || 'No disponible'}
+                <br />
+                User ID: {user?.id || 'No disponible'}
               </div>
               <div className="flex flex-col gap-3">
                 <Link
@@ -210,29 +250,10 @@ export default function DashboardPage() {
                   Crear mi primer quiz
                 </Link>
                 <button
-                  onClick={async () => {
-                    // Test: Crear quiz de prueba
-                    const { data: testQuiz, error } = await supabase
-                      .from('quizzes')
-                      .insert({
-                        title: 'Quiz de Prueba',
-                        description: 'Este es un quiz de prueba',
-                        teacher_id: user.id,
-                      })
-                      .select()
-                      .single()
-                    
-                    if (testQuiz) {
-                      toast.success('Quiz de prueba creado!')
-                      fetchQuizzes(user.id)
-                    } else {
-                      toast.error('Error: ' + (error?.message || 'Desconocido'))
-                      console.error('Test quiz error:', error)
-                    }
-                  }}
+                  onClick={handleTestInsert}
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-all"
                 >
-                  🧪 Crear Quiz de Test
+                  🧪 Crear Quiz de Test (Debug)
                 </button>
               </div>
             </div>
