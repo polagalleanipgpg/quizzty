@@ -30,7 +30,7 @@ export default function SessionLobbyPage() {
 
   const [quiz, setQuiz] = useState<any>(null)
   const [copied, setCopied] = useState(false)
-  const [showQR, setShowQR] = useState(false)
+  const [showQR, setShowQR] = useState(true) // Mostrar QR por defecto
 
   useEffect(() => {
     // Fetch quiz info
