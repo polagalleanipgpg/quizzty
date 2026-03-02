@@ -41,6 +41,9 @@ export default function QRDisplay({ value }: QRDisplayProps) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // Extraer PIN del valor
+  const pin = value.split('/').pop() || value.split('pin=').pop() || ''
+
   return (
     <div className="flex flex-col items-center gap-6">
       <div className="bg-white p-8 rounded-[3rem] shadow-2xl border-4 border-blue-500/30 inline-block">
@@ -50,8 +53,13 @@ export default function QRDisplay({ value }: QRDisplayProps) {
       <div className="flex items-center gap-3 bg-blue-500/10 px-6 py-3 rounded-2xl border-2 border-blue-500/30">
         <span className="text-sm text-blue-400 font-bold uppercase tracking-wider">PIN del Juego:</span>
         <span className="text-5xl font-black text-blue-500 tracking-widest">
-          {value.split('/').pop()}
+          {pin}
         </span>
+      </div>
+
+      <div className="text-center text-sm text-slate-500">
+        <p>Escaneá el QR o ingresá el PIN en:</p>
+        <p className="text-blue-400 font-mono mt-1">{value}</p>
       </div>
 
       <button

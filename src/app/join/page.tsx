@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { QrCode, ArrowLeft, User, Sparkles } from 'lucide-react'
 import Link from 'next/link'
@@ -22,41 +22,66 @@ const AVATAR_COLORS = [
 
 export default function JoinPage() {
   const router = useRouter()
-  const [pin, setPin] = useState('')
+  const searchParams = useSearchParams()
+  const urlPin = searchParams.get('pin')?.toUpperCase() || ''
+
+  const [pin, setPin] = useState(urlPin)
   const [nickname, setNickname] = useState('')
   const [avatarColor, setAvatarColor] = useState(AVATAR_COLORS[0])
   const [loading, setLoading] = useState(false)
   const [step, setStep] = useState<'pin' | 'nickname'>('pin')
   const [sessionId, setSessionId] = useState('')
+  const [validating, setValidating] = useState(false)
 
-  const handlePinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // Si viene PIN por URL, validar automáticamente
+  useEffect(() => {
+    if (urlPin && urlPin.length === 6) {
+      setPin(urlPin)
+      validatePin(urlPin)
+    }
+  }, [urlPin])
+
+  const validatePin = async (pinCode: string) => {
+    if (validating || pinCode.length !== 6) return
+    
+    setValidating(true)
     setLoading(true)
 
     try {
       const { data: session, error } = await supabase
         .from('sessions')
         .select('id, status, quiz_id')
-        .eq('pin', pin.toUpperCase())
+        .eq('pin', pinCode.toUpperCase())
         .single()
 
       if (error || !session) {
-        toast.error('PIN inválido')
+        toast.error('PIN inválido o sesión no encontrada')
+        setStep('pin')
         return
       }
 
       if (session.status !== 'waiting' && session.status !== 'active') {
         toast.error('Este juego ya comenzó o terminó')
+        setStep('pin')
         return
       }
 
       setSessionId(session.id)
       setStep('nickname')
+      toast.success('¡Sesión encontrada! Elegí tu avatar')
     } catch (error) {
+      console.error('Error validating PIN:', error)
       toast.error('Error buscando la sesión')
+      setStep('pin')
     } finally {
       setLoading(false)
+      setValidating(false)
     }
+  }
+
+  const handlePinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await validatePin(pin)
   }
 
   const handleJoin = async (e: React.FormEvent) => {
