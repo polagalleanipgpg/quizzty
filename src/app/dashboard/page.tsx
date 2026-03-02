@@ -53,24 +53,41 @@ export default function DashboardPage() {
 
   const fetchQuizzes = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      console.log('🔍 Fetching quizzes for user:', userId)
+      
+      // Primero intentamos sin el join de questions
+      const { data: quizzesData, error: quizzesError } = await supabase
         .from('quizzes')
-        .select(`
-          *,
-          questions:questions(count)
-        `)
+        .select('*')
         .eq('teacher_id', userId)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (quizzesError) {
+        console.error('❌ Error fetching quizzes:', quizzesError)
+        throw quizzesError
+      }
 
-      const withCount = (data || []).map((q: any) => ({
-        ...q,
-        questions_count: q.questions?.[0]?.count || 0,
-      }))
-      setQuizzes(withCount)
-    } catch (error) {
-      console.error('Error fetching quizzes:', error)
+      console.log('✅ Quizzes encontrados:', quizzesData?.length || 0)
+
+      // Ahora obtenemos el count de questions para cada quiz
+      const quizzesWithCount = await Promise.all(
+        (quizzesData || []).map(async (quiz) => {
+          const { count } = await supabase
+            .from('questions')
+            .select('*', { count: 'exact', head: true })
+            .eq('quiz_id', quiz.id)
+
+          return {
+            ...quiz,
+            questions_count: count || 0,
+          }
+        })
+      )
+
+      setQuizzes(quizzesWithCount)
+    } catch (error: any) {
+      console.error('💥 Error en fetchQuizzes:', error)
+      toast.error('Error cargando quizzes: ' + (error.message || ''))
     } finally {
       setLoading(false)
     }
@@ -174,19 +191,50 @@ export default function DashboardPage() {
 
           {loading ? (
             <div className="text-center py-12 text-slate-500">
+              <div className="animate-pulse text-2xl mb-4">⏳</div>
               Cargando quizzes...
             </div>
           ) : quizzes.length === 0 ? (
             <div className="text-center py-12">
               <Gamepad2 className="w-16 h-16 text-slate-700 mx-auto mb-4" />
               <p className="text-slate-400 mb-4">No tienes quizzes aún</p>
-              <Link
-                href="/teacher/create"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all hover:scale-105"
-              >
-                <Plus className="w-5 h-5" />
-                Crear mi primer quiz
-              </Link>
+              <div className="text-sm text-slate-500 mb-6">
+                Usuario: {user?.email || 'No disponible'}
+              </div>
+              <div className="flex flex-col gap-3">
+                <Link
+                  href="/teacher/create"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all hover:scale-105"
+                >
+                  <Plus className="w-5 h-5" />
+                  Crear mi primer quiz
+                </Link>
+                <button
+                  onClick={async () => {
+                    // Test: Crear quiz de prueba
+                    const { data: testQuiz, error } = await supabase
+                      .from('quizzes')
+                      .insert({
+                        title: 'Quiz de Prueba',
+                        description: 'Este es un quiz de prueba',
+                        teacher_id: user.id,
+                      })
+                      .select()
+                      .single()
+                    
+                    if (testQuiz) {
+                      toast.success('Quiz de prueba creado!')
+                      fetchQuizzes(user.id)
+                    } else {
+                      toast.error('Error: ' + (error?.message || 'Desconocido'))
+                      console.error('Test quiz error:', error)
+                    }
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-all"
+                >
+                  🧪 Crear Quiz de Test
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
