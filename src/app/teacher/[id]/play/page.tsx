@@ -89,7 +89,8 @@ export default function SessionLobbyPage() {
       return
     }
 
-    router.push(`/play/${sessionId}/question`)
+    toast.success('¡Juego iniciado!')
+    router.push(`/play/${sessionId}/teacher`)
   }
 
   const joinUrl = sessionPin ? `${window.location.origin}/join?pin=${sessionPin}` : ''

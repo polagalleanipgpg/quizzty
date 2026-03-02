@@ -129,8 +129,8 @@ function JoinForm() {
       }
       localStorage.setItem(storeKey, JSON.stringify(parsed))
 
-      // Redirect to play page
-      router.push(`/play/${sessionId}`)
+      // Redirect to play page - usar window.location para evitar problemas de routing
+      window.location.href = `/play/${sessionId}/question`
     } catch (error) {
       toast.error('Error inesperado')
     } finally {
