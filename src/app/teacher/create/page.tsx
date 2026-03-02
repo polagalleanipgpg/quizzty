@@ -35,7 +35,7 @@ export default function EditQuizPage() {
   const router = useRouter()
   const params = useParams()
   const quizId = params.id as string
-  const isEdit = quizId !== 'create'
+  const isEdit = quizId && quizId !== 'create'
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -45,6 +45,60 @@ export default function EditQuizPage() {
   const [showAIModal, setShowAIModal] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [fetching, setFetching] = useState(false)
+
+  // Si es edición, cargar datos del quiz
+  useEffect(() => {
+    if (!isEdit) return
+
+    const fetchQuiz = async () => {
+      setFetching(true)
+      try {
+        const { data: quizData, error } = await supabase
+          .from('quizzes')
+          .select('*')
+          .eq('id', quizId)
+          .single()
+
+        if (error || !quizData) {
+          console.error('❌ Error loading quiz:', error)
+          toast.error('Quiz no encontrado')
+          router.push('/dashboard')
+          return
+        }
+
+        setTitle(quizData.title || '')
+        setDescription(quizData.description || '')
+        setSubject(quizData.subject || '')
+
+        const { data: questionsData } = await supabase
+          .from('questions')
+          .select('*')
+          .eq('quiz_id', quizId)
+          .order('sort_order')
+
+        if (questionsData) {
+          const formatted = questionsData.map((q: any) => ({
+            id: q.id,
+            question_text: q.question_text,
+            question_type: q.question_type,
+            options: q.options ? JSON.parse(q.options) : [],
+            correct_answer: q.correct_answer,
+            time_limit: q.time_limit,
+            points: q.points,
+            sort_order: q.sort_order,
+          }))
+          setQuestions(formatted)
+        }
+      } catch (err) {
+        console.error('Error:', err)
+      } finally {
+        setFetching(false)
+      }
+    }
+
+    fetchQuiz()
+  }, [quizId, isEdit, router])
 
   const addQuestion = () => {
     setQuestions([
@@ -213,7 +267,12 @@ Devuelve SOLO JSON válido sin texto adicional, sin markdown:
       const { data: user } = await supabase.auth.getUser()
       if (!user.user) throw new Error('No autenticado')
 
-      console.log('📝 Saving quiz...', { title, questionsCount: questions.length })
+      console.log('📝 Saving quiz...', { title, questionsCount: questions.length, isEdit, quizId })
+
+      // Si es edición, validar que quizId existe
+      if (isEdit && !quizId) {
+        throw new Error('Quiz ID no válido para edición')
+      }
 
       let quizIdToUse = quizId
 
@@ -224,7 +283,10 @@ Devuelve SOLO JSON válido sin texto adicional, sin markdown:
           .update({ title, description, subject })
           .eq('id', quizId)
 
-        if (updateError) throw updateError
+        if (updateError) {
+          console.error('❌ Error updating quiz:', updateError)
+          throw updateError
+        }
       } else {
         console.log('➕ Creating new quiz for teacher:', user.user.id)
         const { data: newQuiz, error: insertError } = await supabase
@@ -303,6 +365,15 @@ Devuelve SOLO JSON válido sin texto adicional, sin markdown:
 
   return (
     <div className="min-h-screen bg-slate-950">
+      {fetching ? (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+          <div className="text-center text-white">
+            <div className="text-4xl mb-4">⏳</div>
+            <p>Cargando quiz...</p>
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Header */}
       <header className="border-b border-white/10 bg-slate-900/50 backdrop-blur-lg sticky top-0 z-40">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -325,11 +396,11 @@ Devuelve SOLO JSON válido sin texto adicional, sin markdown:
               </button>
               <button
                 onClick={saveQuiz}
-                disabled={loading}
+                disabled={loading || fetching}
                 className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 text-white text-sm font-bold rounded-xl transition-all flex items-center gap-2"
               >
                 <Save className="w-4 h-4" />
-                {loading ? 'Guardando...' : 'Guardar'}
+                {loading ? 'Guardando...' : fetching ? 'Cargando...' : isEdit ? 'Actualizar' : 'Guardar'}
               </button>
             </div>
           </div>
@@ -593,6 +664,8 @@ Devuelve SOLO JSON válido sin texto adicional, sin markdown:
             </button>
           </motion.div>
         </div>
+      )}
+        </>
       )}
     </div>
   )
