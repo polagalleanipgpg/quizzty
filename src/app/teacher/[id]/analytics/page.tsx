@@ -67,11 +67,11 @@ export default function QuizAnalyticsPage() {
 
       // Calculate stats
       const totalPlays = participants?.length || 0
-      const avgScore = participants?.reduce((acc, p: any) => {
+      const avgScore = (participants || []).reduce((acc, p: any) => {
         return acc + (p.scores?.[0]?.total_points || 0)
       }, 0) / (totalPlays || 1)
 
-      const avgTime = participants?.reduce((acc, p: any) => {
+      const avgTime = (participants || []).reduce((acc, p: any) => {
         const times = p.answers?.map((a: any) => a.response_time_ms || 0) || []
         return acc + (times.reduce((a: number, b: number) => a + b, 0) / (times.length || 1))
       }, 0) / (totalPlays || 1)
