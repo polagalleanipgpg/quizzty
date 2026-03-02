@@ -195,20 +195,39 @@ Devuelve SOLO JSON válido sin texto adicional, sin markdown:
       return
     }
 
+    // Validar que cada pregunta tenga texto y respuesta correcta
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i]
+      if (!q.question_text.trim()) {
+        toast.error(`La pregunta ${i + 1} está vacía`)
+        return
+      }
+      if (!q.correct_answer) {
+        toast.error(`La pregunta ${i + 1} no tiene respuesta correcta`)
+        return
+      }
+    }
+
     setLoading(true)
     try {
       const { data: user } = await supabase.auth.getUser()
       if (!user.user) throw new Error('No autenticado')
 
+      console.log('📝 Saving quiz...', { title, questionsCount: questions.length })
+
       let quizIdToUse = quizId
 
       if (isEdit) {
-        await supabase
+        console.log('✏️ Updating existing quiz:', quizId)
+        const { error: updateError } = await supabase
           .from('quizzes')
           .update({ title, description, subject })
           .eq('id', quizId)
+
+        if (updateError) throw updateError
       } else {
-        const { data: newQuiz } = await supabase
+        console.log('➕ Creating new quiz for teacher:', user.user.id)
+        const { data: newQuiz, error: insertError } = await supabase
           .from('quizzes')
           .insert({
             title,
@@ -218,32 +237,64 @@ Devuelve SOLO JSON válido sin texto adicional, sin markdown:
           })
           .select()
           .single()
+
+        if (insertError) {
+          console.error('❌ Error creating quiz:', insertError)
+          throw insertError
+        }
+
         quizIdToUse = newQuiz.id
+        console.log('✅ Quiz created:', newQuiz.id)
       }
 
       // Delete existing questions if editing
       if (isEdit) {
-        await supabase.from('questions').delete().eq('quiz_id', quizId)
+        console.log('🗑️ Deleting old questions...')
+        const { error: deleteError } = await supabase
+          .from('questions')
+          .delete()
+          .eq('quiz_id', quizId)
+
+        if (deleteError) throw deleteError
       }
 
       // Insert questions
-      const questionsToInsert = questions.map((q, i) => ({
-        quiz_id: quizIdToUse,
-        question_text: q.question_text,
-        question_type: q.question_type,
-        options: JSON.stringify(q.options),
-        correct_answer: q.correct_answer,
-        time_limit: q.time_limit,
-        points: q.points,
-        sort_order: i,
-      }))
+      console.log('📝 Inserting', questions.length, 'questions...')
+      const questionsToInsert = questions.map((q, i) => {
+        const questionData = {
+          quiz_id: quizIdToUse,
+          question_text: q.question_text,
+          question_type: q.question_type,
+          options: JSON.stringify(q.options),
+          correct_answer: q.correct_answer,
+          time_limit: q.time_limit,
+          points: q.points,
+          sort_order: i,
+        }
+        console.log(`  Question ${i + 1}:`, {
+          text: q.question_text.substring(0, 30) + '...',
+          type: q.question_type,
+          correct: q.correct_answer,
+        })
+        return questionData
+      })
 
-      await supabase.from('questions').insert(questionsToInsert)
+      const { data: insertedQuestions, error: insertQuestionsError } = await supabase
+        .from('questions')
+        .insert(questionsToInsert)
+        .select()
 
-      toast.success('¡Quiz guardado!')
+      if (insertQuestionsError) {
+        console.error('❌ Error inserting questions:', insertQuestionsError)
+        throw insertQuestionsError
+      }
+
+      console.log('✅ Questions inserted:', insertedQuestions?.length)
+
+      toast.success(`¡Quiz guardado con ${questions.length} preguntas!`)
       router.push('/dashboard')
     } catch (error: any) {
-      console.error('Save error:', error)
+      console.error('💥 Save error:', error)
       toast.error(error.message || 'Error guardando quiz')
     } finally {
       setLoading(false)
