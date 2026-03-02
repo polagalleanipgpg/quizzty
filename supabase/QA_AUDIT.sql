@@ -4,9 +4,7 @@
 -- ═══════════════════════════════════════════════════════════════
 
 -- 1. Verificar tablas existentes
-SELECT '═══════════════════════════════════════' as '';
-SELECT '📊 TABLAS EXISTENTES:' as AUDITORIA;
-SELECT '═══════════════════════════════════════' as '';
+SELECT 'TABLAS EXISTENTES' as auditoria;
 SELECT table_name, 
        (SELECT COUNT(*) FROM information_schema.columns c 
         WHERE c.table_name = t.table_name) as column_count
@@ -15,9 +13,7 @@ WHERE table_schema = 'public'
 ORDER BY table_name;
 
 -- 2. Verificar cantidad de datos
-SELECT '═══════════════════════════════════════' as '';
-SELECT '📈 CANTIDAD DE DATOS:' as AUDITORIA;
-SELECT '═══════════════════════════════════════' as '';
+SELECT 'CANTIDAD DE DATOS' as auditoria;
 SELECT 'teachers' as tabla, COUNT(*) as cantidad FROM public.teachers
 UNION ALL
 SELECT 'quizzes', COUNT(*) FROM public.quizzes
@@ -30,49 +26,41 @@ SELECT 'participants', COUNT(*) FROM public.participants
 UNION ALL
 SELECT 'answers', COUNT(*) FROM public.answers
 UNION ALL
-SELECT 'scores', COUNT(*) FROM public.scores;
+SELECT 'scores', COUNT(*) FROM public.scores
+UNION ALL
+SELECT 'reactions', COUNT(*) FROM public.reactions;
 
 -- 3. Verificar RLS policies
-SELECT '═══════════════════════════════════════' as '';
-SELECT '🔒 RLS POLICIES:' as AUDITORIA;
-SELECT '═══════════════════════════════════════' as '';
+SELECT 'RLS POLICIES' as auditoria;
 SELECT tablename, policyname, cmd, roles
 FROM pg_policies 
 WHERE schemaname = 'public'
 ORDER BY tablename, policyname;
 
 -- 4. Verificar índices
-SELECT '═══════════════════════════════════════' as '';
-SELECT '📑 ÍNDICES:' as AUDITORIA;
-SELECT '═══════════════════════════════════════' as '';
+SELECT 'INDICES' as auditoria;
 SELECT tablename, indexname, indexdef
 FROM pg_indexes 
 WHERE schemaname = 'public' 
-AND tablename IN ('quizzes', 'questions', 'sessions', 'participants', 'answers', 'scores')
+AND tablename IN ('quizzes', 'questions', 'sessions', 'participants', 'answers', 'scores', 'reactions', 'teachers')
 ORDER BY tablename, indexname;
 
 -- 5. Verificar triggers
-SELECT '═══════════════════════════════════════' as '';
-SELECT '⚙️ TRIGGERS:' as AUDITORIA;
-SELECT '═══════════════════════════════════════' as '';
+SELECT 'TRIGGERS' as auditoria;
 SELECT trigger_name, event_object_table, action_timing, event_manipulation
 FROM information_schema.triggers 
 WHERE trigger_schema = 'public'
 ORDER BY event_object_table, trigger_name;
 
 -- 6. Verificar funciones
-SELECT '═══════════════════════════════════════' as '';
-SELECT '🔧 FUNCIONES:' as AUDITORIA;
-SELECT '═══════════════════════════════════════' as '';
+SELECT 'FUNCIONES' as auditoria;
 SELECT routine_name, routine_type
 FROM information_schema.routines 
 WHERE routine_schema = 'public' 
 AND routine_type = 'FUNCTION';
 
 -- 7. Test: Verificar integridad de datos
-SELECT '═══════════════════════════════════════' as '';
-SELECT '✅ INTEGRIDAD DE DATOS:' as AUDITORIA;
-SELECT '═══════════════════════════════════════' as '';
+SELECT 'INTEGRIDAD DE DATOS' as auditoria;
 
 -- Quizzes sin teacher
 SELECT 'Quizzes sin teacher:' as test, 
@@ -103,9 +91,7 @@ LEFT JOIN public.sessions s ON s.id = p.session_id
 WHERE s.id IS NULL;
 
 -- 8. Últimos quizzes creados
-SELECT '═══════════════════════════════════════' as '';
-SELECT '📝 ÚLTIMOS QUIZZES:' as AUDITORIA;
-SELECT '═══════════════════════════════════════' as '';
+SELECT 'ULTIMOS QUIZZES' as auditoria;
 SELECT id, title, subject, created_at, 
        (SELECT COUNT(*) FROM public.questions q WHERE q.quiz_id = quizzes.id) as questions_count
 FROM public.quizzes 
@@ -113,14 +99,19 @@ ORDER BY created_at DESC
 LIMIT 10;
 
 -- 9. Últimas sesiones
-SELECT '═══════════════════════════════════════' as '';
-SELECT '🎮 ÚLTIMAS SESIONES:' as AUDITORIA;
-SELECT '═══════════════════════════════════════' as '';
+SELECT 'ULTIMAS SESIONES' as auditoria;
 SELECT id, pin, status, game_mode, created_at,
        (SELECT COUNT(*) FROM public.participants p WHERE p.session_id = sessions.id) as participants_count
 FROM public.sessions 
 ORDER BY created_at DESC 
 LIMIT 10;
+
+-- 10. Verificar Realtime habilitado
+SELECT 'REALTIME CONFIG' as auditoria;
+SELECT schemaname, tablename, pubname
+FROM pg_publication_tables
+WHERE pubname = 'supabase_realtime'
+ORDER BY tablename;
 
 -- ═══════════════════════════════════════════════════════════════
 -- FIN DEL AUDIT
