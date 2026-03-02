@@ -33,67 +33,104 @@ export default function SessionLobbyPage() {
     const fetchQuizAndCreateSession = async () => {
       console.log('🔍 Fetching quiz:', quizId)
       
-      // 1. Obtener info del quiz
-      const { data: quizData, error: quizError } = await supabase
-        .from('quizzes')
-        .select('id, title, description, subject')
-        .eq('id', quizId)
-        .single()
-
-      if (quizError) {
-        console.error('❌ Error fetching quiz:', quizError)
-        toast.error('Quiz no encontrado: ' + quizError.message)
+      if (!quizId) {
+        console.error('❌ No quizId provided')
+        toast.error('Quiz ID no válido')
         setLoading(false)
         return
       }
 
-      console.log('✅ Quiz found:', quizData)
-      setQuiz(quizData)
-
-      // 2. Buscar sesión existente o crear una nueva
-      const { data: existingSession } = await supabase
-        .from('sessions')
-        .select('id, pin, status, game_mode')
-        .eq('quiz_id', quizId)
-        .eq('status', 'waiting')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (existingSession) {
-        console.log('✅ Existing session found:', existingSession)
-        setSessionData(existingSession)
-        setSession(existingSession.id, existingSession.pin, existingSession.status, existingSession.game_mode)
-        setLoading(false)
-      } else {
-        // 3. Crear nueva sesión
-        console.log('📝 Creating new session...')
-        setCreating(true)
-
-        const { data: newSession, error: sessionError } = await supabase
-          .from('sessions')
-          .insert({
-            quiz_id: quizId,
-            status: 'waiting',
-            game_mode: 'classic',
-            current_question_index: 0,
-          })
-          .select('id, pin, status, game_mode')
+      try {
+        // 1. Obtener info del quiz
+        const { data: quizData, error: quizError } = await supabase
+          .from('quizzes')
+          .select('id, title, description, subject')
+          .eq('id', quizId)
           .single()
 
-        if (sessionError) {
-          console.error('❌ Error creating session:', sessionError)
-          toast.error('Error creando sesión: ' + sessionError.message)
+        if (quizError) {
+          console.error('❌ Error fetching quiz:', quizError)
+          toast.error('Quiz no encontrado: ' + quizError.message)
           setLoading(false)
-          setCreating(false)
           return
         }
 
-        console.log('✅ Session created:', newSession)
-        setSessionData(newSession)
-        setSession(newSession.id, newSession.pin, newSession.status, newSession.game_mode)
-        setCreating(false)
+        if (!quizData) {
+          console.error('❌ Quiz not found')
+          toast.error('Quiz no existe')
+          setLoading(false)
+          return
+        }
+
+        console.log('✅ Quiz found:', quizData)
+        setQuiz(quizData)
+
+        // 2. Buscar sesión existente
+        console.log('🔍 Searching for existing session...')
+        const { data: existingSession, error: existingError } = await supabase
+          .from('sessions')
+          .select('id, pin, status, game_mode')
+          .eq('quiz_id', quizId)
+          .eq('status', 'waiting')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (existingError) {
+          console.error('❌ Error searching session:', existingError)
+        }
+
+        if (existingSession) {
+          console.log('✅ Existing session found:', existingSession)
+          setSessionData(existingSession)
+          setSession(existingSession.id, existingSession.pin, existingSession.status, existingSession.game_mode)
+          setLoading(false)
+        } else {
+          // 3. Crear nueva sesión
+          console.log('📝 Creating new session...')
+          setCreating(true)
+
+          const { data: newSession, error: sessionError } = await supabase
+            .from('sessions')
+            .insert({
+              quiz_id: quizId,
+              status: 'waiting',
+              game_mode: 'classic',
+              current_question_index: 0,
+            })
+            .select('id, pin, status, game_mode')
+            .single()
+
+          if (sessionError) {
+            console.error('❌ Error creating session:', sessionError)
+            toast.error('Error creando sesión: ' + sessionError.message)
+            setCreating(false)
+            setLoading(false)
+            return
+          }
+
+          if (!newSession) {
+            console.error('❌ Session created but no data returned')
+            toast.error('Error: No se pudo crear la sesión')
+            setCreating(false)
+            setLoading(false)
+            return
+          }
+
+          console.log('✅ Session created:', newSession)
+          console.log('📍 Session PIN:', newSession.pin)
+          setSessionData(newSession)
+          setSession(newSession.id, newSession.pin, newSession.status, newSession.game_mode)
+          setCreating(false)
+          setLoading(false)
+
+          toast.success('Sesión creada: PIN ' + newSession.pin)
+        }
+      } catch (err: any) {
+        console.error('💥 Unexpected error:', err)
+        toast.error('Error inesperado: ' + err.message)
         setLoading(false)
+        setCreating(false)
       }
     }
 
@@ -167,9 +204,13 @@ export default function SessionLobbyPage() {
     router.push(`/play/${session.id}/question`)
   }
 
-  const joinUrl = `${window.location.origin}/join?pin=${sessionPin}`
+  const joinUrl = sessionPin ? `${window.location.origin}/join?pin=${sessionPin}` : ''
 
   const handleCopyLink = () => {
+    if (!joinUrl) {
+      toast.error('Enlace no disponible')
+      return
+    }
     navigator.clipboard.writeText(joinUrl)
     setCopied(true)
     toast.success('¡Enlace copiado!')
@@ -182,18 +223,29 @@ export default function SessionLobbyPage() {
         <div className="text-center text-white">
           <div className="text-4xl mb-4">{creating ? '📝' : '⏳'}</div>
           <p>{creating ? 'Creando sesión...' : 'Cargando lobby...'}</p>
+          <p className="text-sm text-slate-400 mt-2">Quiz ID: {quizId}</p>
         </div>
       </div>
     )
   }
 
   if (!session || !sessionPin || !quiz) {
+    console.error('❌ Missing data:', { session, sessionPin, quiz })
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center text-white">
           <div className="text-4xl mb-4">❌</div>
-          <p>Sesión no encontrada o error al crear</p>
-          <Link href="/dashboard" className="text-blue-500 hover:underline mt-4 block">
+          <p className="text-lg font-bold mb-2">Error al cargar el lobby</p>
+          <div className="text-sm text-slate-400 mb-4 text-left inline-block">
+            {!session && <p>• Sesión no disponible</p>}
+            {!sessionPin && <p>• PIN no disponible</p>}
+            {!quiz && <p>• Quiz no disponible</p>}
+          </div>
+          <p className="text-xs text-slate-500 mb-4">Quiz ID: {quizId}</p>
+          <Link 
+            href="/dashboard" 
+            className="text-blue-500 hover:underline mt-4 inline-block"
+          >
             Volver al dashboard
           </Link>
         </div>
