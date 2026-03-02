@@ -101,7 +101,8 @@ Devuelve SOLO JSON válido sin texto adicional, sin markdown:
 }`
 
       // Usar fetch directo en lugar del SDK
-      const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+      // Modelo: gemini-2.0-flash es el más reciente y estable
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
       
       const response = await fetch(url, {
         method: 'POST',
