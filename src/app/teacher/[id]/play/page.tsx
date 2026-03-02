@@ -14,7 +14,7 @@ import Leaderboard from '@/components/Leaderboard'
 export default function SessionLobbyPage() {
   const params = useParams()
   const router = useRouter()
-  const sessionId = params.id as string
+  const quizId = params.id as string // Ahora es quiz_id, no session_id
 
   const {
     sessionPin,
@@ -26,64 +26,92 @@ export default function SessionLobbyPage() {
   const [session, setSessionData] = useState<any>(null)
   const [quiz, setQuiz] = useState<any>(null)
   const [copied, setCopied] = useState(false)
-  const [showQR, setShowQR] = useState(true)
   const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
-    const fetchSession = async () => {
-      console.log('🔍 Fetching session:', sessionId)
+    const fetchQuizAndCreateSession = async () => {
+      console.log('🔍 Fetching quiz:', quizId)
       
-      const { data: sessionData, error: sessionError } = await supabase
-        .from('sessions')
-        .select(`
-          id,
-          pin,
-          status,
-          game_mode,
-          quiz_id,
-          quizzes (
-            id,
-            title,
-            description,
-            subject
-          )
-        `)
-        .eq('id', sessionId)
+      // 1. Obtener info del quiz
+      const { data: quizData, error: quizError } = await supabase
+        .from('quizzes')
+        .select('id, title, description, subject')
+        .eq('id', quizId)
         .single()
 
-      if (sessionError) {
-        console.error('❌ Error fetching session:', sessionError)
-        toast.error('Error: ' + sessionError.message)
+      if (quizError) {
+        console.error('❌ Error fetching quiz:', quizError)
+        toast.error('Quiz no encontrado: ' + quizError.message)
         setLoading(false)
         return
       }
 
-      console.log('✅ Session found:', sessionData)
-      setSessionData(sessionData)
-      setQuiz(sessionData.quizzes)
-      
-      if (sessionData.pin) {
-        setSession(sessionData.id, sessionData.pin, sessionData.status, sessionData.game_mode)
-      }
+      console.log('✅ Quiz found:', quizData)
+      setQuiz(quizData)
 
-      setLoading(false)
+      // 2. Buscar sesión existente o crear una nueva
+      const { data: existingSession } = await supabase
+        .from('sessions')
+        .select('id, pin, status, game_mode')
+        .eq('quiz_id', quizId)
+        .eq('status', 'waiting')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (existingSession) {
+        console.log('✅ Existing session found:', existingSession)
+        setSessionData(existingSession)
+        setSession(existingSession.id, existingSession.pin, existingSession.status, existingSession.game_mode)
+        setLoading(false)
+      } else {
+        // 3. Crear nueva sesión
+        console.log('📝 Creating new session...')
+        setCreating(true)
+
+        const { data: newSession, error: sessionError } = await supabase
+          .from('sessions')
+          .insert({
+            quiz_id: quizId,
+            status: 'waiting',
+            game_mode: 'classic',
+            current_question_index: 0,
+          })
+          .select('id, pin, status, game_mode')
+          .single()
+
+        if (sessionError) {
+          console.error('❌ Error creating session:', sessionError)
+          toast.error('Error creando sesión: ' + sessionError.message)
+          setLoading(false)
+          setCreating(false)
+          return
+        }
+
+        console.log('✅ Session created:', newSession)
+        setSessionData(newSession)
+        setSession(newSession.id, newSession.pin, newSession.status, newSession.game_mode)
+        setCreating(false)
+        setLoading(false)
+      }
     }
 
-    fetchSession()
-  }, [sessionId])
+    fetchQuizAndCreateSession()
+  }, [quizId])
 
   useEffect(() => {
-    if (!sessionId) return
+    if (!session?.id) return
 
     const participantsChannel = supabase
-      .channel(`participants:${sessionId}`)
+      .channel(`participants:${session.id}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'participants',
-          filter: `session_id=eq.${sessionId}`,
+          filter: `session_id=eq.${session.id}`,
         },
         async () => {
           const { data } = await supabase
@@ -96,7 +124,7 @@ export default function SessionLobbyPage() {
               is_eliminated,
               scores:scores(total_points)
             `)
-            .eq('session_id', sessionId)
+            .eq('session_id', session.id)
 
           if (data) {
             const withScores = data.map((p: any) => ({
@@ -112,13 +140,13 @@ export default function SessionLobbyPage() {
     return () => {
       supabase.removeChannel(participantsChannel)
     }
-  }, [sessionId, setParticipants])
+  }, [session?.id, setParticipants])
 
   useEffect(() => {
     if (session?.status === 'active') {
-      router.push(`/play/${sessionId}/question`)
+      router.push(`/play/${session.id}/question`)
     }
-  }, [session?.status, sessionId, router])
+  }, [session?.status, session.id, router])
 
   const handleStart = async () => {
     const { error } = await supabase
@@ -128,7 +156,7 @@ export default function SessionLobbyPage() {
         started_at: new Date().toISOString(),
         current_question_index: 0,
       })
-      .eq('id', sessionId)
+      .eq('id', session.id)
 
     if (error) {
       toast.error('Error al iniciar: ' + error.message)
@@ -136,7 +164,7 @@ export default function SessionLobbyPage() {
     }
 
     toast.success('¡Juego iniciado!')
-    router.push(`/play/${sessionId}/question`)
+    router.push(`/play/${session.id}/question`)
   }
 
   const joinUrl = `${window.location.origin}/join?pin=${sessionPin}`
@@ -148,23 +176,23 @@ export default function SessionLobbyPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (loading) {
+  if (loading || creating) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center text-white">
-          <div className="text-4xl mb-4">⏳</div>
-          Cargando lobby...
+          <div className="text-4xl mb-4">{creating ? '📝' : '⏳'}</div>
+          <p>{creating ? 'Creando sesión...' : 'Cargando lobby...'}</p>
         </div>
       </div>
     )
   }
 
-  if (!session || !sessionPin) {
+  if (!session || !sessionPin || !quiz) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center text-white">
           <div className="text-4xl mb-4">❌</div>
-          <p>Sesión no encontrada</p>
+          <p>Sesión no encontrada o error al crear</p>
           <Link href="/dashboard" className="text-blue-500 hover:underline mt-4 block">
             Volver al dashboard
           </Link>
