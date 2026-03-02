@@ -34,9 +34,9 @@ function JoinForm() {
   const [validating, setValidating] = useState(false)
   const [shake, setShake] = useState(false)
 
-  // Si viene PIN por URL, validar automáticamente
+  // Si viene PIN por URL, validar automáticamente UNA SOLA VEZ
   useEffect(() => {
-    if (urlPin && urlPin.length === 6) {
+    if (urlPin && urlPin.length === 6 && step === 'pin') {
       setPin(urlPin)
       validatePin(urlPin)
     }
@@ -185,14 +185,15 @@ function JoinForm() {
               Unirse al Juego
             </h1>
             <p className="text-white/60 text-sm">
-              {step === 'pin' && 'Ingresá el PIN de 6 dígitos'}
+              {step === 'pin' && !urlPin && 'Ingresá el PIN de 6 dígitos'}
+              {step === 'pin' && urlPin && 'Verificando PIN...'}
               {step === 'nickname' && 'Elegí tu nombre y avatar'}
               {step === 'joining' && 'Uniéndote al juego...'}
             </p>
           </div>
 
           <AnimatePresence mode="wait">
-            {step === 'pin' && (
+            {step === 'pin' && !urlPin && (
               <motion.form
                 key="pin"
                 initial={{ opacity: 0, x: -50 }}
@@ -245,6 +246,27 @@ function JoinForm() {
                   )}
                 </button>
               </motion.form>
+            )}
+
+            {step === 'pin' && urlPin && (
+              <motion.div
+                key="validating"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="text-center py-12"
+              >
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                  className="inline-block w-20 h-20 border-4 border-white/20 border-t-blue-500 rounded-full mb-6"
+                />
+                <p className="text-white font-bold text-lg mb-2">
+                  Verificando sesión...
+                </p>
+                <p className="text-white/60 text-sm">
+                  PIN: {urlPin}
+                </p>
+              </motion.div>
             )}
 
             {step === 'nickname' && (
