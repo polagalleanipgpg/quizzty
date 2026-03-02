@@ -82,7 +82,8 @@ export default function EditQuizPage() {
       const genAI = new GoogleGenerativeAI(
         process.env.NEXT_PUBLIC_GOOGLE_AI_KEY || ''
       )
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' })
+      // Usar el modelo estable más reciente
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-001' })
 
       const prompt = `Genera 5 preguntas de quiz sobre: ${aiPrompt}. 
       Formato JSON estricto:
