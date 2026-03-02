@@ -79,41 +79,87 @@ export default function EditQuizPage() {
 
     setGenerating(true)
     try {
-      const genAI = new GoogleGenerativeAI(
-        process.env.NEXT_PUBLIC_GOOGLE_AI_KEY || ''
-      )
-      // Usar el modelo estable más reciente
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-001' })
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_AI_KEY
+      
+      if (!apiKey) {
+        throw new Error('Falta la API Key de Google. Configura NEXT_PUBLIC_GOOGLE_AI_KEY')
+      }
 
-      const prompt = `Genera 5 preguntas de quiz sobre: ${aiPrompt}. 
-      Formato JSON estricto:
-      {
-        "questions": [
-          {
-            "question_text": "pregunta",
-            "question_type": "multiple_choice",
-            "options": ["opcion1", "opcion2", "opcion3", "opcion4"],
-            "correct_answer": "respuesta correcta exacta de las opciones",
-            "time_limit": 30,
-            "points": 1000
+      const prompt = `Genera exactamente 5 preguntas de quiz sobre: ${aiPrompt}.
+Devuelve SOLO JSON válido sin texto adicional, sin markdown:
+{
+  "questions": [
+    {
+      "question_text": "texto de la pregunta",
+      "question_type": "multiple_choice",
+      "options": ["opcion1", "opcion2", "opcion3", "opcion4"],
+      "correct_answer": "opcion1",
+      "time_limit": 30,
+      "points": 1000
+    }
+  ]
+}`
+
+      // Usar fetch directo en lugar del SDK
+      const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 2048,
           }
-        ]
-      }`
+        })
+      })
 
-      const result = await model.generateContent(prompt)
-      const response = await result.response
-      const text = response.text().replace(/```json|```/g, '').trim()
-      const data = JSON.parse(text)
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error?.message || 'Error en la API')
+      }
 
-      if (data.questions && Array.isArray(data.questions)) {
-        setQuestions([...questions, ...data.questions])
-        toast.success(`¡${data.questions.length} preguntas generadas!`)
+      const data = await response.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+      
+      if (!text) {
+        throw new Error('La IA no devolvió contenido válido')
+      }
+
+      // Limpiar respuesta
+      const cleanText = text.replace(/```json\s*|```/g, '').trim()
+      const parsed = JSON.parse(cleanText)
+
+      if (parsed.questions && Array.isArray(parsed.questions)) {
+        setQuestions([...questions, ...parsed.questions])
+        toast.success(`¡${parsed.questions.length} preguntas generadas!`)
         setShowAIModal(false)
         setAiPrompt('')
+      } else {
+        throw new Error('La IA no devolvió el formato esperado')
       }
     } catch (error: any) {
       console.error('AI Error:', error)
-      toast.error('Error generando preguntas. Intenta de nuevo.')
+      let msg = 'Error generando preguntas. '
+      if (error.message?.includes('API Key')) {
+        msg += 'Verifica tu API Key en .env.local y Vercel'
+      } else if (error.message?.includes('403')) {
+        msg += 'API Key no válida. Verifica en Google AI Studio'
+      } else if (error.message?.includes('404')) {
+        msg += 'Modelo no encontrado.'
+      } else if (error.message?.includes('quota') || error.message?.includes('QUOTA')) {
+        msg += 'Límite de API alcanzado. Espera o usa otra key.'
+      } else {
+        msg += error.message
+      }
+      toast.error(msg)
     } finally {
       setGenerating(false)
     }
